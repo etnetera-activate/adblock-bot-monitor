@@ -88,7 +88,7 @@
         
         const turnstilePromise = loadTurnstileToken();
         const checksPromise = Promise.all([
-            checkResourceBlocked('https://www.googletagmanager.com/gtm.js?id=GTM-TEST'),
+            checkResourceBlocked('https://www.googletagmanager.com/gtm.js?id=GTM-TQP4WV7B'),
             checkResourceBlocked('https://connect.facebook.net/en_US/fbevents.js'),
             checkResourceBlocked('https://www.google-analytics.com/analytics.js'),
             checkResourceBlocked('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js'),
