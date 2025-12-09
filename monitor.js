@@ -78,7 +78,7 @@
             
             checkTurnstile();
 
-            setTimeout(() => { resolve(null); }, 3500); 
+            setTimeout(() => { resolve(null); }, 8000); 
         });
     }
 
