@@ -129,6 +129,7 @@
             googleAnalyticsRequestBlocked: googleAnalyticsRequestBlocked,
             googleAdsRequestBlocked: googleAdsRequestBlocked,
             bingAdsRequestBlocked: bingAdsRequestBlocked,
+            cookiebotBlocked: cookiebotBlocked,
             gtmRequestBlocked: gtmRequestBlocked,
             hostname: window.location.hostname,
             pageURL: window.location.href,
