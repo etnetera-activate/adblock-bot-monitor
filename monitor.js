@@ -49,7 +49,7 @@
         return new URLSearchParams(window.location.search).get(name) || '';
     }
 
-    // ⚡ CORE FUNCTION: Sends data using sendBeacon (Robust on Exit)
+    // ⚡ CORE FUNCTION: Sends data using fetch + keepalive (Robust on Exit)
     function sendAnalyticsData() {
         if (dataSent) return; // Prevent double sending
         dataSent = true;
@@ -86,15 +86,8 @@
 
         const jsonPayload = JSON.stringify(payload);
 
-        // 🟢 METHOD 1: navigator.sendBeacon (Best for Page Unload)
-        // We use a Blob with application/json type to satisfy your backend
-        if (navigator.sendBeacon) {
-            const blob = new Blob([jsonPayload], { type: 'application/json' });
-            const success = navigator.sendBeacon(ENDPOINT, blob);
-            if (success) return; // If queued successfully, we are done
-        }
-
-        // 🟢 METHOD 2: Fetch with Keepalive (Fallback)
+        // 🟢 CHANGED: We removed sendBeacon because it struggles with CORS + JSON on exit.
+        // We now exclusively use fetch with keepalive: true, which is the modern standard for this.
         fetch(ENDPOINT, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -109,7 +102,12 @@
                     'ad_block_detected': adBlockDetected
                 });
             }
-        }).catch(err => console.warn("Analytics send failed", err));
+        }).catch(err => {
+            // Suppress errors during unload to avoid "Cancelled" noise in console
+            if (!document.hidden) {
+                console.warn("Analytics send failed", err);
+            }
+        });
     }
 
     // --- 3. Execution Logic ---
