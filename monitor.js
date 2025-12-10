@@ -1,6 +1,6 @@
 (function() {
     // 🔴 CONFIGURATION: Put your Cloudflare Turnstile Site Key here
-    const TURNSTILE_SITE_KEY = "0x4AAAAAACDB4EPBzvAxPOxV";
+    const TURNSTILE_SITE_KEY = "0x4AAAAAACDFJFkgBiwww4ZT";
 
     async function getBrowser() {
         var userAgent = navigator.userAgent;
