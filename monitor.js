@@ -6,6 +6,7 @@
     // Global state to track if we successfully sent data
     let dataSent = false;
     let turnstileToken = null;
+    let detectedBrowser = 'Unknown'; // Store browser immediately to avoid async on exit
     
     // Default network results (1 = Blocked, 0 = Allowed)
     let networkResults = {
@@ -23,6 +24,9 @@
         if (userAgent.indexOf("Chrome") > -1) return "Chrome";
         return "Other";
     }
+
+    // ⚡ Pre-calculate browser immediately so we don't await on exit
+    getBrowser().then(b => detectedBrowser = b);
 
     // --- 1. Passive Network Check ---
     async function checkResourceBlocked(url) {
@@ -45,13 +49,11 @@
         return new URLSearchParams(window.location.search).get(name) || '';
     }
 
-    // ⚡ CORE FUNCTION: Sends data using Fetch + Keepalive
-    async function sendAnalyticsData() {
+    // ⚡ CORE FUNCTION: Sends data using sendBeacon (Robust on Exit)
+    function sendAnalyticsData() {
         if (dataSent) return; // Prevent double sending
         dataSent = true;
 
-        const browserName = await getBrowser();
-        
         // Check if CSS bait was hidden (Adblock detection)
         let adBlockDetected = 0;
         const bait = document.querySelector('.pub_300x250');
@@ -61,10 +63,10 @@
 
         const payload = {
             recaptchaToken: turnstileToken, // Null if user leaves early
-            browser: browserName,
+            browser: detectedBrowser, // Use pre-calculated value
             adBlockDetected: adBlockDetected,
             
-            // Network results (might be incomplete if leaving VERY fast, but usually instant)
+            // Network results
             facebookRequestBlocked: networkResults.fb,
             googleAnalyticsRequestBlocked: networkResults.ga,
             googleAdsRequestBlocked: networkResults.ads,
@@ -82,12 +84,21 @@
             utm_campaign: getQueryParam('utm_campaign')
         };
 
-        // 🟢 UPDATE: Use fetch with keepalive: true
-        // This allows the request to complete even if the tab closes.
+        const jsonPayload = JSON.stringify(payload);
+
+        // 🟢 METHOD 1: navigator.sendBeacon (Best for Page Unload)
+        // We use a Blob with application/json type to satisfy your backend
+        if (navigator.sendBeacon) {
+            const blob = new Blob([jsonPayload], { type: 'application/json' });
+            const success = navigator.sendBeacon(ENDPOINT, blob);
+            if (success) return; // If queued successfully, we are done
+        }
+
+        // 🟢 METHOD 2: Fetch with Keepalive (Fallback)
         fetch(ENDPOINT, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
+            body: jsonPayload,
             keepalive: true 
         }).then(res => res.json()).then(response => {
             // Push to DataLayer (only if user is still on page)
