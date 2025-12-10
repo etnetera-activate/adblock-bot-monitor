@@ -142,7 +142,7 @@
         };
 
         var xhr = new XMLHttpRequest();
-        xhr.open("POST", "https://adblock-data-collector-922954175378.europe-west1.run.app", true);
+        xhr.open("POST", "https://adblock-bot-detector-272425173894.europe-central2.run.app", true);
         xhr.setRequestHeader("Content-Type", "application/json");
 
         xhr.onload = function() {
