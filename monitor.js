@@ -49,7 +49,7 @@
         return new URLSearchParams(window.location.search).get(name) || '';
     }
 
-    // ⚡ CORE FUNCTION: Sends data using fetch + keepalive (Robust on Exit)
+    // ⚡ CORE FUNCTION: Sends data using sendBeacon + URLSearchParams (No Preflight)
     function sendAnalyticsData() {
         if (dataSent) return; // Prevent double sending
         dataSent = true;
@@ -62,8 +62,8 @@
         }
 
         const payload = {
-            recaptchaToken: turnstileToken, // Null if user leaves early
-            browser: detectedBrowser, // Use pre-calculated value
+            recaptchaToken: turnstileToken || '', // Empty string if null
+            browser: detectedBrowser,
             adBlockDetected: adBlockDetected,
             
             // Network results
@@ -84,17 +84,26 @@
             utm_campaign: getQueryParam('utm_campaign')
         };
 
-        const jsonPayload = JSON.stringify(payload);
+        // 🟢 TECHNIQUE CHANGE: Convert to URLSearchParams
+        // This forces Content-Type: application/x-www-form-urlencoded
+        // This avoids the CORS "Preflight" (OPTIONS) request which often gets cancelled on exit.
+        const urlParams = new URLSearchParams();
+        for (const key in payload) {
+            urlParams.append(key, payload[key]);
+        }
 
-        // 🟢 CHANGED: We removed sendBeacon because it struggles with CORS + JSON on exit.
-        // We now exclusively use fetch with keepalive: true, which is the modern standard for this.
+        // 1. Try sendBeacon (Best for Unload)
+        if (navigator.sendBeacon) {
+            const success = navigator.sendBeacon(ENDPOINT, urlParams);
+            if (success) return;
+        }
+
+        // 2. Fallback to Fetch with keepalive
         fetch(ENDPOINT, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: jsonPayload,
+            body: urlParams, // Sending params directly sets correct simple headers
             keepalive: true 
         }).then(res => res.json()).then(response => {
-            // Push to DataLayer (only if user is still on page)
             if (window.dataLayer) {
                 window.dataLayer.push({
                     'event': 'turnstile_verified', 
@@ -103,10 +112,7 @@
                 });
             }
         }).catch(err => {
-            // Suppress errors during unload to avoid "Cancelled" noise in console
-            if (!document.hidden) {
-                console.warn("Analytics send failed", err);
-            }
+            if (!document.hidden) console.warn("Analytics send failed", err);
         });
     }
 
