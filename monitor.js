@@ -1,6 +1,17 @@
 (function() {
-    // 🔴 CONFIGURATION: Put your Cloudflare Turnstile Site Key here
+    // 🔴 CONFIGURATION
     const TURNSTILE_SITE_KEY = "0x4AAAAAACDFJFkgBiwww4ZT";
+    const ENDPOINT = "https://adblock-bot-detector-272425173894.europe-central2.run.app";
+
+    // Global state to track data for immediate sending on exit
+    let dataSent = false;
+    let turnstileToken = null;
+    let detectedBrowser = 'Unknown';
+    
+    // Store network check results globally so they are ready anytime
+    let networkResults = {
+        gtm: 0, fb: 0, ga: 0, ads: 0, bing: 0, cookie: 0
+    };
 
     async function getBrowser() {
         var userAgent = navigator.userAgent;
@@ -14,6 +25,9 @@
         if (userAgent.indexOf("Trident") > -1 || userAgent.indexOf("MSIE") > -1) return "Internet Explorer";
         return "Other";
     }
+
+    // Pre-calculate browser immediately
+    getBrowser().then(b => detectedBrowser = b);
 
     // --- 1. The Passive Network Check ---
     async function checkResourceBlocked(url) {
@@ -36,10 +50,88 @@
         }
         return new URLSearchParams();
     }
-
     const scriptParams = getScriptParams();
 
-    // --- 2. Turnstile Loader (15s Timeout) ---
+    function getQueryParam(name) {
+        const params = new URLSearchParams(window.location.search);
+        return params.get(name) || '';
+    }
+
+    // --- 2. Fire and Forget Data Sender ---
+    function sendAnalyticsData() {
+        if (dataSent) return; 
+        dataSent = true;
+
+        // Check AdBlock Bait (Cosmetic)
+        let adBlockDetected = 0;
+        const bait = document.querySelector('.pub_300x250');
+        if (bait && (bait.offsetHeight === 0 || bait.offsetWidth === 0 || window.getComputedStyle(bait).display === 'none')) {
+            adBlockDetected = 1;
+        }
+
+        const payload = {
+            recaptchaToken: turnstileToken || '', 
+            browser: detectedBrowser,
+            adBlockDetected: adBlockDetected,
+            
+            // Map global results to payload fields
+            facebookRequestBlocked: networkResults.fb,
+            googleAnalyticsRequestBlocked: networkResults.ga,
+            googleAdsRequestBlocked: networkResults.ads,
+            bingAdsRequestBlocked: networkResults.bing,
+            cookiebotBlocked: networkResults.cookie,
+            gtmRequestBlocked: networkResults.gtm,
+            
+            hostname: window.location.hostname,
+            pageURL: window.location.href,
+            event_name: scriptParams.get('event_name') || 'unknown_event',
+            value: scriptParams.get('event_value') || '',
+            referrer: document.referrer || '(direct)',
+            utm_source: getQueryParam('utm_source'),
+            utm_medium: getQueryParam('utm_medium'),
+            utm_campaign: getQueryParam('utm_campaign')
+        };
+
+        // Convert to URLSearchParams for Simple Request (No Preflight)
+        const urlParams = new URLSearchParams();
+        for (const key in payload) {
+            urlParams.append(key, payload[key]);
+        }
+
+        // Method A: sendBeacon (Best for Unload/Exit)
+        if (navigator.sendBeacon) {
+            const success = navigator.sendBeacon(ENDPOINT, urlParams);
+            if (success) return; 
+        }
+
+        // Method B: Fetch with keepalive (Fallback)
+        fetch(ENDPOINT, {
+            method: 'POST',
+            body: urlParams,
+            keepalive: true 
+        }).catch(err => {
+            if (!document.hidden) console.warn("Analytics send failed", err);
+        });
+    }
+
+    // --- 3. Execution Logic ---
+
+    // A. Start CSS Bait
+    var bait = document.createElement('div');
+    bait.className = 'pub_300x250 pub_728x90 text-ad textAd text_ad text_ads text-ads text-ad-links';
+    bait.style.cssText = 'width:1px;height:1px;position:absolute;left:-10000px;top:-10000px;';
+    document.body.appendChild(bait);
+
+    // B. Start Network Checks (Update global object as they finish)
+    const updateNet = (key, prom) => prom.then(v => networkResults[key] = v);
+    updateNet('gtm', checkResourceBlocked('https://www.googletagmanager.com/gtm.js?id=GTM-TQP4WV7B'));
+    updateNet('fb', checkResourceBlocked('https://connect.facebook.net/en_US/fbevents.js'));
+    updateNet('ga', checkResourceBlocked('https://www.google-analytics.com/analytics.js'));
+    updateNet('ads', checkResourceBlocked('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js'));
+    updateNet('bing', checkResourceBlocked('https://bat.bing.com/bat.js'));
+    updateNet('cookie', checkResourceBlocked('https://consent.cookiebot.com/uc.js'));
+
+    // C. Turnstile Loader
     function loadTurnstileToken() {
         return new Promise((resolve) => {
             const uniqueId = 'cf-wrapper-' + Math.random().toString(36).substr(2, 9);
@@ -55,7 +147,6 @@
                 script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
                 script.async = true;
                 script.defer = true;
-                script.onerror = () => resolve(null);
                 document.head.appendChild(script);
             }
 
@@ -66,14 +157,16 @@
                             sitekey: TURNSTILE_SITE_KEY,
                             appearance: 'always', 
                             callback: function(token) {
-                                resolve(token);
+                                turnstileToken = token;
+                                sendAnalyticsData(); // Success! Send immediately.
                             },
                             'error-callback': function() {
-                                resolve(null);
+                                // On error, we still send data (token will be null)
+                                sendAnalyticsData();
                             }
                         });
                     } catch (e) {
-                        resolve(null);
+                        // Ignore render errors
                     }
                 } else {
                     setTimeout(checkTurnstile, 100);
@@ -82,86 +175,19 @@
             
             checkTurnstile();
             
-            setTimeout(() => { resolve(null); }, 14000); 
+            // Timeout Safety (10s as per your previous script)
+            // If Turnstile hangs, we send whatever data we have
+            setTimeout(() => { if(!dataSent) sendAnalyticsData(); }, 10000); 
         });
     }
 
-    // --- 3. Main Execution ---
-    var adBlockDetected = 0;
+    loadTurnstileToken();
 
-    getBrowser().then(async browser => {
-        
-        const turnstilePromise = loadTurnstileToken();
-        const checksPromise = Promise.all([
-            checkResourceBlocked('https://www.googletagmanager.com/gtm.js?id=GTM-TQP4WV7B'),
-            checkResourceBlocked('https://connect.facebook.net/en_US/fbevents.js'),
-            checkResourceBlocked('https://www.google-analytics.com/analytics.js'),
-            checkResourceBlocked('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js'),
-            checkResourceBlocked('https://bat.bing.com/bat.js'),
-            checkResourceBlocked('https://consent.cookiebot.com/uc.js')
-        ]);
-
-        var bait = document.createElement('div');
-        bait.innerHTML = '&nbsp;';
-        bait.className = 'pub_300x250 pub_728x90 text-ad textAd text_ad text_ads text-ads text-ad-links';
-        bait.style.cssText = 'width:1px;height:1px;position:absolute;left:-10000px;top:-10000px;';
-        document.body.appendChild(bait);
-        
-        const [turnstileToken, networkResults] = await Promise.all([turnstilePromise, checksPromise]);
-
-        if (bait.offsetHeight === 0 || bait.offsetWidth === 0 || window.getComputedStyle(bait).display === 'none') {
-            adBlockDetected = 1;
+    // D. BEACON ON EXIT: If user leaves, send what we have immediately
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden' && !dataSent) {
+            sendAnalyticsData();
         }
-        document.body.removeChild(bait);
-
-        var [gtmRequestBlocked, facebookRequestBlocked, googleAnalyticsRequestBlocked, googleAdsRequestBlocked, bingAdsRequestBlocked, cookiebotBlocked] = networkResults;
-
-        function getQueryParam(name) {
-            const params = new URLSearchParams(window.location.search);
-            return params.get(name) || '';
-        }
-
-        var data = {
-            recaptchaToken: turnstileToken,
-            browser: browser,
-            adBlockDetected: adBlockDetected,
-            facebookRequestBlocked: facebookRequestBlocked,
-            googleAnalyticsRequestBlocked: googleAnalyticsRequestBlocked,
-            googleAdsRequestBlocked: googleAdsRequestBlocked,
-            bingAdsRequestBlocked: bingAdsRequestBlocked,
-            cookiebotBlocked: cookiebotBlocked,
-            gtmRequestBlocked: gtmRequestBlocked,
-            hostname: window.location.hostname,
-            pageURL: window.location.href,
-            event_name: scriptParams.get('event_name') || 'unknown_event',
-            value: scriptParams.get('event_value') || '',
-            referrer: document.referrer || '(direct)',
-            utm_source: getQueryParam('utm_source'),
-            utm_medium: getQueryParam('utm_medium'),
-            utm_campaign: getQueryParam('utm_campaign')
-        };
-
-        var xhr = new XMLHttpRequest();
-        xhr.open("POST", "https://adblock-bot-detector-272425173894.europe-central2.run.app", true);
-        xhr.setRequestHeader("Content-Type", "application/json");
-
-        xhr.onload = function() {
-            if (xhr.status >= 200 && xhr.status < 300) {
-                try {
-                    var response = JSON.parse(xhr.responseText);
-                    window.dataLayer = window.dataLayer || [];
-                    window.dataLayer.push({
-                        'event': 'turnstile_verified', 
-                        'bot_score': response.recaptcha_score, 
-                        'ad_block_detected': adBlockDetected
-                    });
-                } catch (e) {
-                    console.warn("Failed to parse analytics response", e);
-                }
-            }
-        };
-
-        xhr.onerror = function () { console.warn("Analytics upload failed"); };
-        xhr.send(JSON.stringify(data));
     });
+
 })();
