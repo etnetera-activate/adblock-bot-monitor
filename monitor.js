@@ -12,7 +12,6 @@
     };
 
     // --- 1. Manual Bot Detection (Client Side) ---
-    // Checks for obvious automation flags (Headless Chrome, Selenium, etc.)
     function isBot() {
         return (
             navigator.webdriver || 
@@ -32,6 +31,7 @@
         if (userAgent.indexOf("Brave") > -1 || (navigator.brave && await navigator.brave.isBrave())) return "Brave";
         if (userAgent.indexOf("Safari") > -1 && userAgent.indexOf("Chrome") === -1) return "Safari";
         if (userAgent.indexOf("Chrome") > -1) return "Chrome";
+        if (userAgent.indexOf("Trident") > -1 || userAgent.indexOf("MSIE") > -1) return "Internet Explorer";
         return "Other";
     }
 
@@ -73,11 +73,12 @@
         }
 
         const payload = {
-            // We removed recaptchaToken. 
-            // We now send the client-side bot flag.
             isBotDetected: isBot() ? 1 : 0,
             
             browser: detectedBrowser,
+            // 🆕 New Field: Raw User Agent for classification
+            userAgent: navigator.userAgent, 
+            
             adBlockDetected: adBlockDetected,
             
             facebookRequestBlocked: networkResults.fb,
@@ -119,17 +120,13 @@
 
     // --- 4. Execution Logic ---
 
-    // A. Start CSS Bait
     var bait = document.createElement('div');
     bait.className = 'pub_300x250 pub_728x90 text-ad textAd text_ad text_ads text-ads text-ad-links';
     bait.style.cssText = 'width:1px;height:1px;position:absolute;left:-10000px;top:-10000px;';
     document.body.appendChild(bait);
 
-    // B. Start Network Checks
     const updateNet = (key, prom) => prom.then(v => networkResults[key] = v);
     
-    // We wait for all checks to finish, then send data immediately.
-    // No waiting for Turnstile anymore.
     Promise.all([
         updateNet('gtm', checkResourceBlocked('https://www.googletagmanager.com/gtm.js?id=GTM-TQP4WV7B')),
         updateNet('fb', checkResourceBlocked('https://connect.facebook.net/en_US/fbevents.js')),
@@ -138,11 +135,9 @@
         updateNet('bing', checkResourceBlocked('https://bat.bing.com/bat.js')),
         updateNet('cookie', checkResourceBlocked('https://consent.cookiebot.com/uc.js'))
     ]).then(() => {
-        // Wait small buffer for CSS bait to be detected (200ms)
         setTimeout(sendAnalyticsData, 250);
     });
 
-    // C. Beacon on Exit (Safety Net)
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden' && !dataSent) {
             sendAnalyticsData();
