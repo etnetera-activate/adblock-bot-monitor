@@ -95,9 +95,9 @@
             event_name: scriptParams.get('event_name') || 'unknown_event',
             value: scriptParams.get('event_value') || '',
             referrer: document.referrer || '(direct)',
-            utm_source: getQueryParam('utm_source'),
-            utm_medium: getQueryParam('utm_medium'),
-            utm_campaign: getQueryParam('utm_campaign')
+            src: getQueryParam('utm_source'),
+            mdm: getQueryParam('utm_medium'),
+            cmpg: getQueryParam('utm_campaign')
         };
 
         const urlParams = new URLSearchParams();
