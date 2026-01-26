@@ -1,5 +1,4 @@
 (function() {
-    // 🔴 CONFIGURATION: Your Cloud Run Endpoint
     const ENDPOINT = "https://adblock-bot-detector-272425173894.europe-central2.run.app";
 
     // Global state
@@ -50,9 +49,13 @@
 
     // --- 3. Data Collection & Sending ---
     function getScriptParams() {
+        // 1. Try modern currentScript (works in most cases)
         if (document.currentScript) return new URLSearchParams(document.currentScript.src.split('?')[1]);
-        const script = document.querySelector('script[src*="adblock-collector.js"]') || 
-                       document.querySelector('script[src*="adblock-tracker.js"]');
+        
+        // 2. Fallback: Find script by the "event_name" parameter instead of filename.
+        // This allows you to rename the file to "utils.js" without breaking this logic.
+        const script = document.querySelector('script[src*="event_name="]');
+        
         return (script && script.src.includes('?')) ? new URLSearchParams(script.src.split('?')[1]) : new URLSearchParams();
     }
     const scriptParams = getScriptParams();
@@ -76,8 +79,7 @@
             isBotDetected: isBot() ? 1 : 0,
             
             browser: detectedBrowser,
-            // 🆕 New Field: Raw User Agent for classification
-            userAgent: navigator.userAgent, 
+            // Removed userAgent to prevent request blocking
             
             adBlockDetected: adBlockDetected,
             
