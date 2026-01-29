@@ -1,6 +1,6 @@
 (function() {
     // 🔴 CONFIGURATION: Your Cloud Run Endpoint
-    const ENDPOINT = "https://adblock-bot-detector-272425173894.europe-central2.run.app";
+    const ENDPOINT = "https://abdc-272425173894.europe-central2.run.app";
 
     // Global state
     let dataSent = false;
