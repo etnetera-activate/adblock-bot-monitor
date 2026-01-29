@@ -14,15 +14,7 @@
     };
 
     // --- 1. Manual Bot Detection (Client Side) ---
-    function isBot() {
-        return (
-            navigator.webdriver || 
-            window.outerWidth === 0 || 
-            window.outerHeight === 0 || 
-            navigator.hardwareConcurrency === 0 ||
-            (navigator.languages && navigator.languages.length === 0)
-        );
-    }
+    // Removed isBot check to avoid fingerprinting
 
     async function getBrowser() {
         var userAgent = navigator.userAgent;
@@ -92,7 +84,7 @@
             recaptchaToken: turnstileToken || '', // Sent to look legitimate, even if server ignores it
             browser: detectedBrowser,
             adBlockDetected: adBlockDetected,
-            isBotDetected: isBot() ? 1 : 0, // Restored manual bot detection
+            // Removed isBotDetected to prevent fingerprinting blocking
             
             facebookRequestBlocked: networkResults.fb,
             googleAnalyticsRequestBlocked: networkResults.ga,
