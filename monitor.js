@@ -8,18 +8,13 @@
     let turnstileToken = null;
     let detectedBrowser = 'Unknown';
     
-    // Store network check results
-    let networkResults = {
-        gtm: 0, fb: 0, ga: 0, ads: 0, bing: 0, cookie: 0
-    };
-
-    // --- 1. Manual Bot Detection (Client Side) ---
-    // Removed isBot check to avoid fingerprinting
-
+    // Removed specific network probes to avoid Brave Heuristics blocking
+    // We will just send 0 for specific services to keep BigQuery schema happy
+    
     async function getBrowser() {
         var userAgent = navigator.userAgent;
 
-        // Arc Browser Detection (CSS Check - most reliable for Arc)
+        // Arc Browser Detection
         if (getComputedStyle(document.documentElement).getPropertyValue('--arc-palette-title')) {
             return "Arc Browser";
         }
@@ -35,7 +30,6 @@
         if (userAgent.indexOf("Brave") > -1 || (navigator.brave && await navigator.brave.isBrave())) return "Brave";
         if (userAgent.indexOf("DuckDuckGo") > -1) return "DuckDuckGo";
         
-        // Arc fallback via User Agent
         if (userAgent.indexOf("Arc") > -1) return "Arc Browser";
 
         if (userAgent.indexOf("Safari") > -1 && userAgent.indexOf("Chrome") === -1) return "Safari";
@@ -47,17 +41,7 @@
     // Pre-calculate browser immediately
     getBrowser().then(b => detectedBrowser = b);
 
-    // --- 2. Passive Network Check ---
-    async function checkResourceBlocked(url) {
-        try {
-            await fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-store' });
-            return 0; 
-        } catch (error) {
-            return 1; 
-        }
-    }
-
-    // --- 3. Data Collection & Sending ---
+    // --- Data Collection & Sending ---
     function getScriptParams() {
         if (document.currentScript) return new URLSearchParams(document.currentScript.src.split('?')[1]);
         const script = document.querySelector('script[src*="event_name="]');
@@ -73,7 +57,8 @@
         if (dataSent) return; 
         dataSent = true;
 
-        // Check AdBlock Bait
+        // Check AdBlock Bait (Cosmetic Filtering)
+        // This is much safer than network probing as it only checks DOM elements
         let adBlockDetected = 0;
         const bait = document.querySelector('.pub_300x250');
         if (bait && (bait.offsetHeight === 0 || bait.offsetWidth === 0 || window.getComputedStyle(bait).display === 'none')) {
@@ -81,17 +66,18 @@
         }
 
         const payload = {
-            recaptchaToken: turnstileToken || '', // Sent to look legitimate, even if server ignores it
+            recaptchaToken: turnstileToken || '', 
             browser: detectedBrowser,
             adBlockDetected: adBlockDetected,
-            // Removed isBotDetected to prevent fingerprinting blocking
             
-            facebookRequestBlocked: networkResults.fb,
-            googleAnalyticsRequestBlocked: networkResults.ga,
-            googleAdsRequestBlocked: networkResults.ads,
-            bingAdsRequestBlocked: networkResults.bing,
-            cookiebotBlocked: networkResults.cookie,
-            gtmRequestBlocked: networkResults.gtm,
+            // Sending 0 for specific checks to pass schema validation
+            // without triggering Brave's network heuristics
+            facebookRequestBlocked: 0,
+            googleAnalyticsRequestBlocked: 0,
+            googleAdsRequestBlocked: 0,
+            bingAdsRequestBlocked: 0,
+            cookiebotBlocked: 0,
+            gtmRequestBlocked: 0,
             
             hostname: window.location.hostname,
             pageURL: window.location.href,
@@ -123,26 +109,15 @@
         });
     }
 
-    // --- 4. Execution Logic ---
+    // --- Execution Logic ---
 
+    // Start CSS Bait
     var bait = document.createElement('div');
     bait.className = 'pub_300x250 pub_728x90 text-ad textAd text_ad text_ads text-ads text-ad-links';
     bait.style.cssText = 'width:1px;height:1px;position:absolute;left:-10000px;top:-10000px;';
     document.body.appendChild(bait);
 
-    const updateNet = (key, prom) => prom.then(v => networkResults[key] = v);
-    
-    // Start Network Checks
-    const checksPromise = Promise.all([
-        updateNet('gtm', checkResourceBlocked('https://www.googletagmanager.com/gtm.js?id=GTM-TQP4WV7B')),
-        updateNet('fb', checkResourceBlocked('https://connect.facebook.net/en_US/fbevents.js')),
-        updateNet('ga', checkResourceBlocked('https://www.google-analytics.com/analytics.js')),
-        updateNet('ads', checkResourceBlocked('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js')),
-        updateNet('bing', checkResourceBlocked('https://bat.bing.com/bat.js')),
-        updateNet('cookie', checkResourceBlocked('https://consent.cookiebot.com/uc.js'))
-    ]);
-
-    // Turnstile Loader (Restored to bypass Brave blocking)
+    // Turnstile Loader 
     function loadTurnstileToken() {
         const uniqueId = 'cf-wrapper-' + Math.random().toString(36).substr(2, 9);
         const container = document.createElement('div');
@@ -166,12 +141,12 @@
                         appearance: 'always', 
                         callback: function(token) {
                             turnstileToken = token;
-                            // Wait for network checks to finish before sending
-                            checksPromise.then(() => sendAnalyticsData());
+                            // Send immediately on success
+                            // We delayed slightly to ensure CSS bait check is done
+                            setTimeout(sendAnalyticsData, 200);
                         },
                         'error-callback': function() {
-                            // On error, send anyway
-                            checksPromise.then(() => sendAnalyticsData());
+                            setTimeout(sendAnalyticsData, 200);
                         }
                     });
                 } catch (e) { /* Ignore render errors */ }
