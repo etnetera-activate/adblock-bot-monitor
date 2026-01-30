@@ -2,6 +2,18 @@
     // 🔴 CONFIGURATION: Your Cloud Run Endpoint
     const ENDPOINT = "https://abdc-272425173894.europe-central2.run.app";
 
+    // --- 1. Manual Bot Detection (Client Side) ---
+    // Checks for obvious automation flags (Headless Chrome, Selenium, etc.)
+    function isBot() {
+        return (
+            navigator.webdriver || 
+            window.outerWidth === 0 || 
+            window.outerHeight === 0 || 
+            navigator.hardwareConcurrency === 0 ||
+            (navigator.languages && navigator.languages.length === 0)
+        );
+    }
+
     async function getBrowser() {
         var userAgent = navigator.userAgent;
         if (userAgent.indexOf("Edg") > -1) return "Edge";
@@ -15,7 +27,7 @@
         return "Other";
     }
 
-    // --- 1. The Passive Network Check ---
+    // --- 2. The Passive Network Check ---
     async function checkResourceBlocked(url) {
         try {
             await fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-store' });
@@ -39,7 +51,7 @@
 
     const scriptParams = getScriptParams();
 
-    // --- 2. Main Execution ---
+    // --- 3. Main Execution ---
     var adBlockDetected = 0;
 
     getBrowser().then(async browser => {
@@ -78,6 +90,7 @@
 
         var data = {
             recaptchaToken: null, // Turnstile removed
+            isBotDetected: isBot() ? 1 : 0, // Manual bot detection added
             browser: browser,
             adBlockDetected: adBlockDetected,
             facebookRequestBlocked: facebookRequestBlocked,
