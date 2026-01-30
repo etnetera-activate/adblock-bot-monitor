@@ -139,20 +139,30 @@
     document.body.appendChild(bait);
 
     // B. Start Network Checks
-    const updateNet = (key, prom) => prom.then(v => networkResults[key] = v);
-    
     Promise.all([
-        updateNet('gtm', checkResourceBlocked('https://www.googletagmanager.com/gtm.js?id=GTM-TQP4WV7B')),
-        updateNet('fb', checkResourceBlocked('https://connect.facebook.net/en_US/fbevents.js')),
-        updateNet('ga', checkResourceBlocked('https://www.google-analytics.com/analytics.js')),
-        updateNet('ads', checkResourceBlocked('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js')),
-        updateNet('bing', checkResourceBlocked('https://bat.bing.com/bat.js')),
-        updateNet('cookie', checkResourceBlocked('https://consent.cookiebot.com/uc.js'))
-    ]).then(() => {
-        // Wait small buffer for CSS bait to be detected (250ms)
-        // Then send data immediately (No Turnstile waiting)
+        checkResourceBlocked('https://www.googletagmanager.com/gtm.js?id=GTM-TQP4WV7B'),
+        checkResourceBlocked('https://connect.facebook.net/en_US/fbevents.js'),
+        checkResourceBlocked('https://www.google-analytics.com/analytics.js'),
+        checkResourceBlocked('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js'),
+        checkResourceBlocked('https://bat.bing.com/bat.js'),
+        checkResourceBlocked('https://consent.cookiebot.com/uc.js')
+    ]).then(results => {
+        networkResults.gtm = results[0];
+        networkResults.fb = results[1];
+        networkResults.ga = results[2];
+        networkResults.ads = results[3];
+        networkResults.bing = results[4];
+        networkResults.cookie = results[5];
+        
+        // Trigger A: When checks finish (Fast)
         setTimeout(sendAnalyticsData, 250);
     });
+
+    // Trigger B: Safety Timeout (2s)
+    // Ensures data is sent even if network checks hang
+    setTimeout(() => {
+        if (!dataSent) sendAnalyticsData();
+    }, 2000);
 
     // C. Beacon on Exit (Safety Net)
     document.addEventListener('visibilitychange', () => {
