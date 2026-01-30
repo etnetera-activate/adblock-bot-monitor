@@ -3,7 +3,6 @@
     const ENDPOINT = "https://abdc-272425173894.europe-central2.run.app";
 
     // --- 1. Manual Bot Detection (Client Side) ---
-    // Checks for obvious automation flags (Headless Chrome, Selenium, etc.)
     function isBot() {
         return (
             navigator.webdriver || 
@@ -57,12 +56,19 @@
     getBrowser().then(async browser => {
         
         // Start Network Checks
+        // UPDATED: Using Data Collection endpoints (Pixels) which are harder to "shim" than libraries
         const checksPromise = Promise.all([
+            // GTM (Container itself)
             checkResourceBlocked('https://www.googletagmanager.com/gtm.js?id=GTM-TQP4WV7B'),
+            // Facebook Pixel (Library)
             checkResourceBlocked('https://connect.facebook.net/en_US/fbevents.js'),
-            checkResourceBlocked('https://www.google-analytics.com/analytics.js'),
+            // Google Analytics (Changed to Data Collection Pixel - harder to fake 200 OK)
+            checkResourceBlocked('https://www.google-analytics.com/collect?v=1&t=pageview&tid=UA-000000-1'),
+            // Google Ads (Library)
             checkResourceBlocked('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js'),
+            // Bing Ads (Library)
             checkResourceBlocked('https://bat.bing.com/bat.js'),
+            // Cookiebot
             checkResourceBlocked('https://consent.cookiebot.com/uc.js')
         ]);
 
