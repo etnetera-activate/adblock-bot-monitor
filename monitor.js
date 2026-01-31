@@ -15,15 +15,57 @@
 
     async function getBrowser() {
         var userAgent = navigator.userAgent;
+
+        // Arc Browser Detection (CSS Check - most reliable for Arc)
+        if (getComputedStyle(document.documentElement).getPropertyValue('--arc-palette-title')) {
+            return "Arc Browser";
+        }
+
         if (userAgent.indexOf("Edg") > -1) return "Edge";
+        if (userAgent.indexOf("Seznam.cz") > -1) return "Seznam Browser";
+        if (userAgent.indexOf("SamsungBrowser") > -1) return "Samsung Internet";
+        if (userAgent.indexOf("UCBrowser") > -1) return "UC Browser";
+        if (userAgent.indexOf("YaBrowser") > -1) return "Yandex";
         if (userAgent.indexOf("Firefox") > -1) return "Firefox";
         if (userAgent.indexOf("OPR") > -1 || userAgent.indexOf("Opera") > -1) return "Opera";
         if (userAgent.indexOf("Vivaldi") > -1) return "Vivaldi";
         if (userAgent.indexOf("Brave") > -1 || (navigator.brave && await navigator.brave.isBrave())) return "Brave";
+        if (userAgent.indexOf("DuckDuckGo") > -1) return "DuckDuckGo";
+        
+        // Arc fallback via User Agent
+        if (userAgent.indexOf("Arc") > -1) return "Arc Browser";
+
         if (userAgent.indexOf("Safari") > -1 && userAgent.indexOf("Chrome") === -1) return "Safari";
         if (userAgent.indexOf("Chrome") > -1) return "Chrome";
         if (userAgent.indexOf("Trident") > -1 || userAgent.indexOf("MSIE") > -1) return "Internet Explorer";
         return "Other";
+    }
+
+    // --- Device Detection Logic ---
+    function getDeviceType() {
+        const ua = navigator.userAgent;
+        if (/(tablet|ipad|playbook|silk)|(android(?!.*mobi))/i.test(ua)) {
+            return "Tablet";
+        }
+        if (/Mobile|Android|iP(hone|od)|IEMobile|BlackBerry|Kindle|Silk-Accelerated|(hpw|web)OS|Opera M(obi|ini)/.test(ua)) {
+            return "Mobile";
+        }
+        return "Desktop";
+    }
+
+    function getDeviceModel() {
+        const ua = navigator.userAgent;
+        
+        // Android Model
+        const androidMatch = ua.match(/Android.*?; (\w+ \w+)\)/);
+        if (androidMatch && androidMatch.length > 1) return androidMatch[1];
+
+        // iOS Devices
+        if (/iPhone/.test(ua)) return "iPhone";
+        if (/iPad/.test(ua)) return "iPad";
+        if (/Macintosh/.test(ua)) return "Mac"; // Often iPads spoof Mac UA
+        
+        return "Unknown";
     }
 
     // --- 2. The Passive Network Check ---
@@ -98,6 +140,8 @@
             recaptchaToken: null, // Turnstile removed
             isBotDetected: isBot() ? 1 : 0, // Manual bot detection added
             browser: browser,
+            deviceType: getDeviceType(), // 🆕 "Mobile", "Desktop", or "Tablet"
+            deviceModel: getDeviceModel(), // 🆕 e.g. "iPhone", "Pixel 5", "Unknown"
             adBlockDetected: adBlockDetected,
             facebookRequestBlocked: facebookRequestBlocked,
             googleAnalyticsRequestBlocked: googleAnalyticsRequestBlocked,
