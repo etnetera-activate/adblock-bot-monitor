@@ -98,14 +98,13 @@
     getBrowser().then(async browser => {
         
         // Start Network Checks
-        // UPDATED: Using Data Collection endpoints (Pixels) which are harder to "shim" than libraries
         const checksPromise = Promise.all([
             // GTM (Container itself)
             checkResourceBlocked('https://www.googletagmanager.com/gtm.js?id=GTM-TQP4WV7B'),
             // Facebook Pixel (Library)
             checkResourceBlocked('https://connect.facebook.net/en_US/fbevents.js'),
-            // Google Analytics (Changed to Data Collection Pixel - harder to fake 200 OK)
-            checkResourceBlocked('https://www.google-analytics.com/collect?v=1&t=pageview&tid=UA-000000-1'),
+            // Google Analytics (UPDATED: GA4 Endpoint)
+            checkResourceBlocked('https://region1.google-analytics.com/g/collect'),
             // Google Ads (Library)
             checkResourceBlocked('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js'),
             // Bing Ads (Library)
@@ -140,8 +139,8 @@
             recaptchaToken: null, // Turnstile removed
             isBotDetected: isBot() ? 1 : 0, // Manual bot detection added
             browser: browser,
-            deviceType: getDeviceType(), // 🆕 "Mobile", "Desktop", or "Tablet"
-            deviceModel: getDeviceModel(), // 🆕 e.g. "iPhone", "Pixel 5", "Unknown"
+            deviceType: getDeviceType(), // "Mobile", "Desktop", or "Tablet"
+            deviceModel: getDeviceModel(), // e.g. "iPhone", "Pixel 5", "Unknown"
             adBlockDetected: adBlockDetected,
             facebookRequestBlocked: facebookRequestBlocked,
             googleAnalyticsRequestBlocked: googleAnalyticsRequestBlocked,
@@ -167,10 +166,15 @@
             if (xhr.status >= 200 && xhr.status < 300) {
                 try {
                     var response = JSON.parse(xhr.responseText);
+                    
+                    // Interpret server score: 1.0 is Human, 0.0 is Bot.
+                    // Map this to a binary "is_bot" flag where 1 = True (Bot).
+                    var isBotOutcome = (response.recaptcha_score === 0) ? 1 : 0;
+
                     window.dataLayer = window.dataLayer || [];
                     window.dataLayer.push({
-                        'event': 'turnstile_verified', 
-                        'bot_score': response.recaptcha_score, 
+                        'event': 'bot_verification', 
+                        'is_bot': isBotOutcome,
                         'ad_block_detected': adBlockDetected
                     });
                 } catch (e) {
